@@ -3,9 +3,13 @@ name = "autorust_codegen"
 version = "0.1.0"
 authors = ["Cameron Taggart <cameron.taggart@gmail.com>"]
 edition = "2018"
+license = "MIT"
 publish = false
 
 [lib]
+
+[[bin]]
+name = "gen_ado"
 
 [dependencies]
 autorust_openapi = { path = "../openapi" }

@@ -1,6 +1,6 @@
 use crate::{
     codegen::{parse_path_params, type_name_gen, PARAM_RE},
-    codegen::{parse_query_params, TypeNameCode},
+    codegen::TypeNameCode,
     identifier::{parse_ident, SnakeCaseIdent},
     spec::{get_type_name_for_schema_ref, WebOperation, WebParameter, WebVerb},
     status_codes::get_success_responses,
@@ -73,14 +73,14 @@ pub fn create_client(modules: &[String], endpoint: Option<&str>) -> Result<Token
         #[derive(Clone)]
         pub struct Client {
             endpoint: String,
-            credential: std::sync::Arc<dyn azure_core::auth::TokenCredential>,
+            credential: crate::Credential,
             scopes: Vec<String>,
             pipeline: azure_core::Pipeline,
         }
 
         #[derive(Clone)]
         pub struct ClientBuilder {
-            credential: std::sync::Arc<dyn azure_core::auth::TokenCredential>,
+            credential: crate::Credential,
             endpoint: Option<String>,
             scopes: Option<Vec<String>>,
             options: azure_core::ClientOptions,
@@ -91,7 +91,7 @@ pub fn create_client(modules: &[String], endpoint: Option<&str>) -> Result<Token
         impl ClientBuilder {
             #[doc = "Create a new instance of `ClientBuilder`."]
             #[must_use]
-            pub fn new(credential: std::sync::Arc<dyn azure_core::auth::TokenCredential>) -> Self {
+            pub fn new(credential: crate::Credential) -> Self {
                 Self {
                     credential,
                     endpoint: None,
@@ -141,9 +141,10 @@ pub fn create_client(modules: &[String], endpoint: Option<&str>) -> Result<Token
             pub(crate) fn endpoint(&self) -> &str {
                 self.endpoint.as_str()
             }
-            pub(crate) fn token_credential(&self) -> &dyn azure_core::auth::TokenCredential {
-                self.credential.as_ref()
+            pub(crate) fn token_credential(&self) -> &crate::Credential {
+                &self.credential
             }
+            #[allow(dead_code)]
             pub(crate) fn scopes(&self) -> Vec<&str> {
                 self.scopes.iter().map(String::as_str).collect()
             }
@@ -154,13 +155,13 @@ pub fn create_client(modules: &[String], endpoint: Option<&str>) -> Result<Token
 
             #[doc = "Create a new `ClientBuilder`."]
             #[must_use]
-            pub fn builder(credential: std::sync::Arc<dyn azure_core::auth::TokenCredential>) -> ClientBuilder {
+            pub fn builder(credential: crate::Credential) -> ClientBuilder {
                 ClientBuilder::new(credential)
             }
 
             #[doc = "Create a new `Client`."]
             #[must_use]
-            pub fn new(endpoint: impl Into<String>, credential: std::sync::Arc<dyn azure_core::auth::TokenCredential>, scopes: Vec<String>, options: azure_core::ClientOptions) -> Self {
+            pub fn new(endpoint: impl Into<String>, credential: crate::Credential, scopes: Vec<String>, options: azure_core::ClientOptions) -> Self {
                 let endpoint = endpoint.into();
                 let pipeline = azure_core::Pipeline::new(
                     option_env!("CARGO_PKG_NAME"),
@@ -347,16 +348,11 @@ impl ToTokens for RequestCode {
     }
 }
 
-// Only bearer token authentication is supported right now.
 struct AuthCode {}
 impl ToTokens for AuthCode {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.extend(quote! {
-            let credential = this.client.token_credential();
-            let token_response = credential
-                .get_token(&this.client.scopes().join(" "))
-                .await?;
-            req.insert_header(azure_core::headers::AUTHORIZATION, format!("Bearer {}", token_response.token.secret()));
+            req.insert_header(azure_core::headers::AUTHORIZATION, &this.client.token_credential().http_authorization_header(&this.client.scopes).await?);
         })
     }
 }
@@ -534,7 +530,10 @@ fn create_operation_code(cg: &CodeGen, operation: &WebOperationGen) -> Result<Op
     let parameters = operation.0.parameters();
     let param_names: HashSet<_> = parameters.iter().map(|p| p.name()).collect();
     let has_param_api_version = param_names.contains(query_param::API_VERSION);
-    let mut skip = parse_query_params(&operation.0.path)?;
+    // @@@JPB: Remove this change as it breaks with some of the azure-devops specs
+    // https://github.com/Azure/azure-sdk-for-rust/pull/790
+    //let mut skip = parse_query_params(&operation.0.path)?;
+    let mut skip = HashSet::new();
     skip.insert(query_param::API_VERSION.to_string());
     let parameters: Vec<&WebParameter> = parameters.clone().into_iter().filter(|p| !skip.contains(p.name())).collect();
     let parameters = create_function_params_code(&parameters)?;

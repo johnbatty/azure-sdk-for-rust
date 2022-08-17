@@ -115,15 +115,16 @@ pub fn parse_path_params(path: &str) -> Vec<String> {
 /// Get a set of parameter names in the URI query
 /// For example: "/?restype=service&comp=userdelegationkey"
 /// Returns ["restype", "comp"]
-pub fn parse_query_params(uri: &str) -> Result<HashSet<String>> {
-    if let Some(n) = uri.find('?') {
-        let query = &uri[n..];
-        let qs = qstring::QString::from(query);
-        Ok(qs.into_iter().map(|(k, _)| k).collect())
-    } else {
-        Ok(HashSet::new())
-    }
-}
+// @@@JPB: Removed as this breaks code generation for azure-devops crate
+// pub fn parse_query_params(uri: &str) -> Result<HashSet<String>> {
+//     if let Some(n) = uri.find('?') {
+//         let query = &uri[n..];
+//         let qs = qstring::QString::from(query);
+//         Ok(qs.into_iter().map(|(k, _)| k).collect())
+//     } else {
+//         Ok(HashSet::new())
+//     }
+// }
 
 #[derive(Clone)]
 pub struct TypeNameCode {
