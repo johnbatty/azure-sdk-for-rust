@@ -31,6 +31,8 @@ pub use self::{
     spec::{ResolvedSchema, Spec, WebOperation},
 };
 
+const COPYRIGHT: &str = "// Copyright (c) Microsoft Corporation.\n// Licensed under the MIT License.";
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PropertyName {
     pub file_path: Utf8PathBuf,
@@ -128,7 +130,7 @@ fn write_file<P: AsRef<Utf8Path>>(file: P, tokens: &TokenStream, print_writing_f
     if print_writing_file {
         println!("writing file {}", &file);
     }
-    let code = tokens.to_string();
+    let code = format!("{}\n{}", COPYRIGHT, tokens);
     let mut buffer = File::create(&file).with_context(ErrorKind::Io, || format!("create file {file}"))?;
     buffer
         .write_all(code.as_bytes())

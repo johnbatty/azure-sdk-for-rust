@@ -128,6 +128,13 @@ pub fn create_client(modules: &[String], endpoint: Option<&str>) -> Result<Token
                 self
             }
 
+            #[doc = "Set per-call policies."]
+            #[must_use]
+            pub fn per_call_policies(mut self, policies: impl Into<Vec<std::sync::Arc<dyn azure_core::Policy>>>) -> Self {
+                self.options = self.options.per_call_policies(policies);
+                self
+            }
+
             #[doc = "Convert the builder into a `Client` instance."]
             #[must_use]
             pub fn build(self) -> Client {
@@ -352,7 +359,9 @@ struct AuthCode {}
 impl ToTokens for AuthCode {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         tokens.extend(quote! {
-            req.insert_header(azure_core::headers::AUTHORIZATION, &this.client.token_credential().http_authorization_header(&this.client.scopes).await?);
+            if let Some(auth_header) = this.client.token_credential().http_authorization_header(&this.client.scopes).await? {
+                req.insert_header(azure_core::headers::AUTHORIZATION, auth_header);
+            }
         })
     }
 }
@@ -415,7 +424,13 @@ impl ToTokens for BuildRequestParamsCode {
                             quote! {
                                 req.url_mut().query_pairs_mut().append_pair(#param_name, #param_name_var);
                             }
-                        } else {
+                        } else if param.type_name.is_date_time() {
+                            quote! {
+                                let formatted_date_time = crate::date_time::format_date_time(#param_name_var)?;
+                                req.url_mut().query_pairs_mut().append_pair(#param_name, &formatted_date_time);
+                            }
+                        }
+                        else {
                             quote! {
                                 req.url_mut().query_pairs_mut().append_pair(#param_name, &#param_name_var.to_string());
                             }
@@ -842,7 +857,12 @@ fn create_rsp_value(tp: Option<&TokenStream>) -> TokenStream {
         }
     } else {
         quote! {
-            let rsp_value: #tp = serde_json::from_slice(&rsp_body)?;
+            let rsp_value: #tp = serde_json::from_slice(&rsp_body)
+                .map_err(|e| azure_core::error::Error::full(
+                     azure_core::error::ErrorKind::DataConversion,
+                     e,
+                     format!("Failed to deserialize response:\n{}", String::from_utf8_lossy(&rsp_body))
+                ))?;
         }
     }
 }
